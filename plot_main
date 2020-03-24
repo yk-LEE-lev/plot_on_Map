@@ -1,0 +1,201 @@
+# -*- coding: utf-8 -*-
+#
+#
+import math
+import os
+import folium
+from folium import plugins
+import pandas as pd
+
+#
+# 地図を作成する関数（地図の指定）
+#
+def MAP_Create(lat, lon):
+
+    # 地図の指定
+    tiles = 'cartodbpositron'
+    attr = ""
+    # 国土地理院
+    #tiles = 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'
+    tiles = 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'
+    #tiles = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'
+    #tiles = 'https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.jpg'
+    attr = "<a href=\"https://maps.gsi.go.jp/development/ichiran.html\">国土地理院</a>"
+    # OpenStreetMap
+    #tiles = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+    #tiles = 'https://dev.{s}.tile.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'
+    #tiles = 'http://www.toolserver.org/tiles/bw-mapnik/{z}/{x}/{y}.png' # OSM-monochrome
+    #attr = '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases" title="CyclOSM - Open Bicycle render">CyclOSM</a> | Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    # CARTO basemap
+    #tiles = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+    #attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    #
+    #tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
+    #tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+    #attr = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community'
+    #
+    #tiles = 'https://maps.heigit.org/openmapsurfer/tiles/roads/webmercator/{z}/{x}/{y}.png'
+    #attr = 'Imagery from <a href="http://giscience.uni-hd.de/">GIScience Research Group @ University of Heidelberg</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    # Wikimedia
+    #tiles = 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}{r}.png'
+    #attr = '<a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia</a>'
+    #
+    #tiles = 'https://{s}.tile.openstreetmap.se/hydda/base/{z}/{x}/{y}.png'
+    #attr = 'Tiles courtesy of <a href="http://openstreetmap.se/" target="_blank">OpenStreetMap Sweden</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+
+    # 地図の縮尺
+    zoom = 11
+
+    # 地図を作成
+    Map = folium.Map(tiles='cartodbpositron',
+                     control_scale=True, zoom_control=True,
+                     location=[lat, lon], zoom_start=zoom)
+    fg = folium.FeatureGroup(name='オーバレイマップ')
+    folium.TileLayer(tiles=tiles, attr=attr, transparent =True).add_to(fg)
+    minimap = plugins.MiniMap()
+    Map.add_child(minimap)
+    fg.add_to(Map)
+
+    """
+    # 鉄道マップ
+    tiles = 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'
+    attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Map style: &copy; <a href="https://www.OpenRailwayMap.org">OpenRailwayMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    fg = folium.FeatureGroup(name='OpenRailwayMap')
+    folium.TileLayer(tiles=tiles, attr=attr).add_to(fg)
+    fg.add_to(Map)
+    """
+
+    return Map
+
+#
+# 基地局-一番近い路線ポイントを線でプロット
+#
+def Dist_Plot(Map, df):
+    fg = folium.FeatureGroup(name="距離")
+    for row in df.itertuples():
+        tooltip = str(round(row.LN_Distance, 2))+" km"
+        folium.PolyLine(locations=[(row.LN_Lat, row.LN_Lon),
+                                   (row.CF_Lat, row.CF_Lon)],
+                        weight=2, color="#202020",
+                        tooltip=tooltip,
+                        opacity=0.4).add_to(fg)
+    fg.add_to(Map)
+    return Map
+
+#
+# 一番近い路線ポイントをプロット
+#
+def LN_Plot(Map, df):
+    fg = folium.FeatureGroup(name="李さん計算ポイント")
+    for row in df.itertuples():
+        popup = "{0}, {1}".format(row.LN_Lat, row.LN_Lon)
+        popup = popup+"<br>Distance:{0} km".format(row.LN_Distance)
+        popup = folium.Popup(popup, max_width=1000)
+        folium.CircleMarker(location=[row.LN_Lat, row.LN_Lon],
+                            color='#a02020', weight=1, fill_color='#c08080',
+                            fill_opacity=0.8, radius=5,
+                            popup=popup,
+                            opacity=0.8).add_to(fg)
+    fg.add_to(Map)
+    return Map
+
+#
+# 基地局(Cell)をプロット
+#
+def Cell_Plot(Map, df, colour):
+#    df = df.drop_duplicates(subset='Transmitter')
+    fg = folium.FeatureGroup(name="基地局")
+    for row in df.itertuples():
+#        popup = "{0}<br>".format(row.eCGI)
+#        popup = popup+"PCI:{0}".format(row.PCI)
+        popup = "Cell_Name:{0}".format(row.Cell_Name)
+        popup = folium.Popup(popup, max_width=1000)
+        folium.CircleMarker(location=[row.latitude, row.longitude],
+                            color='#2020a0', weight=1, fill_color=colour,
+                            fill_opacity=0.8, radius=5,
+                            popup=popup,
+                            opacity=0.8).add_to(fg)
+        if tabool:
+            arc = row.BeamWidth
+            if arc == 360:
+                folium.Circle([row.latitude, row.longitude],opacity=0.1 ,fill_color=colour,fill_opacity=0.3, radius=row.TA,direction=row.Azimuth).add_to(Map)
+            else :
+                plugins.SemiCircle([row.latitude, row.longitude],opacity=0.1 ,fill_color=colour,fill_opacity=0.3, radius=row.TA,direction=row.Azimuth, arc = arc).add_to(Map)
+    fg.add_to(Map)
+    return Map
+
+# メイン処理関数
+def Filtered_Plot(Map, df, colour):
+#    df = df.drop_duplicates(subset='Transmitter')
+    fg = folium.FeatureGroup(name="基地局")
+    for row in df.itertuples():
+#        popup = "{0}<br>".format(row.eCGI)
+#        popup = popup+"PCI:{0}".format(row.PCI)
+        popup = "Cell_Name:{0}".format(row.Cell_Name)
+        popup = folium.Popup(popup, max_width=1000)
+        folium.CircleMarker(location=[row.latitude, row.longitude],
+                            color='#2020a0', weight=1, fill_color=colour,
+                            fill_opacity=1, radius=5,
+                            popup=popup,
+                            opacity=0.8).add_to(fg)
+    fg.add_to(Map)
+    return Map
+# メイン処理関数
+def main(eNBdf, criter):
+    global colours
+    # GPS情報の取り出し（GPS情報無しの行は削除)
+    Lat = eNBdf['latitude']
+    Lon = eNBdf['longitude']
+
+    # 作られる地図の中心点を定義し、具現する地図の範囲を決める
+    map_lat = Lat.mean()
+    map_lon = Lon.mean()
+    #　Background地図
+    Map = MAP_Create(map_lat, map_lon)
+    if localbool :
+        eNBdf = eNBdf[eNBdf["local_dist"]==localfil]
+    if spfbool :
+        eNBdf = eNBdf[eNBdf[spfilter]==spfbool]
+    # mapにbasecellをplotする
+    if not criter:
+        Map = Cell_Plot(Map, eNBdf, colours[0])
+    else:
+        critlayer = set(eNBdf[criter].values)
+        colournum = 0
+        for i in critlayer:
+            tdf = eNBdf[eNBdf[criter]==i]
+            print(tdf)
+            #if colournum == 0:
+            #    Map = Cell_Plot(Map, tdf, colours[colournum])
+            Map = Cell_Plot(Map, tdf, colours[colournum])
+            colournum = colournum+1
+    #　ｄraw a line on the map between base point and target
+#    Map = Dist_Plot(Map, eNBdf)
+    # mapにtargetPointの点をplotする
+#    Map = LN_Plot(Map, eNBdf)
+    folium.LayerControl().add_to(Map)
+    
+    #　最後にHTMLで開けられるHTMLファイルを作成する
+    Map.save("line_map_additional.html")
+
+    return
+
+#
+# メイン処理
+#
+
+eNBList1 = "cocococo.csv"#ファイルの名前
+crit = "heisetsu"
+localfil = "鹿児島県"
+localbool = False#地域の分類をする/しない
+spfilter = "Even"
+spfbool = False#他の分類基準を適用する/しない
+tabool = True#TAを表示する/しない
+colours = ["#008000","#000000","#C0392B",'#F4D03F',"#7D3C98","#2C3E50","#1A5276","#7D6608"]
+eNBdf = pd.read_csv(eNBList1,encoding='shift-jis')
+
+#eNBdf = eNBdf.drop_duplicates(subset='Cell_Name')
+
+main(eNBdf, crit)
+
+# EOF
