@@ -1,0 +1,188 @@
+# -*- coding: utf-8 -*-
+"""
+Created on %(date)s
+
+@author: %(username)s
+"""
+import pandas as pd
+import json
+from vincenty import vincenty
+import math
+
+
+#receive lanename and return array of coordinates
+def getbasedata(filename):
+    with open(filename, encoding='utf-8') as f:
+        data = json.load(f)['features']
+    return data
+#
+def slide(lnameset):
+    retcordbase = []
+    for i in lnameset:
+           #open background data as dict format
+           crdb = slicebase(i,basedat)
+           retcordbase.append(crdb)
+    return retcordbase
+def slicebase(lnam,basedat):
+    walnuts = []
+    for iv in basedat:
+        wtf1 = iv["properties"]["N02_003"]
+        wtf2 = iv["properties"]["N02_004"]
+        if wtf1 == lnam[0] and wtf2 == lnam[1]:
+            walnut = iv['geometry']['coordinates']
+            walnuts.append(walnut)
+    coords = pilecoor(walnuts)
+    return coords
+###################
+def pilecoor(nuts):
+    coords = []
+    temp1 = []
+    for nut in nuts:
+        for i in nut:
+            if not temp1:
+                temp1 = [i[1],i[0]]
+                if temp1 not in coords:
+                    coords.append(temp1)
+                continue
+            temp2 = [i[1],i[0]]
+            #print(none)
+            tempdis = (vincenty(temp1,temp2))*1000
+            if tempdis > 15:
+                cnt = int(tempdis//15)+1
+                retarr = getclinks(temp1,temp2,cnt)
+                for j in retarr:
+                    coords.append(j)
+            coords.append(i)
+            temp1 = temp2
+        temp1 = []
+    return coords
+##################
+def getclinks(a,b,times):#generate new points between two point of coordinates
+    xcol = (b[0]-a[0])/times
+    ycol = (b[1]-a[1])/times
+    temparr = []
+    for i in range(round(times,0)):
+        if i==0:
+            continue
+        temparr.append([a[0]+(xcol*i),a[1]+(ycol*i)])
+    return temparr
+###################
+def fndmindis(target, linenamef):
+    base = []
+    dummyarr = []
+    for i in range(len(lnset)):
+        if linenamef == lnset[i][0] :
+          base = coordbase[i]  
+    for j in range(len(base)):
+        mindis = vincenty(base[j],target)
+        dummyarr.append([base[j],mindis])
+    dummyarr.sort(key=lambda x: x[1], reverse=False)
+    top5 = []
+    top5.append(dummyarr[0][0])
+    top5.append(dummyarr[1][0])
+    top5.append(dummyarr[2][0])
+    top5.append(dummyarr[3][0])
+    top5.append(dummyarr[4][0])
+    retpack = loopbox2(target,top5)#[target, closest point, distance]
+    mindisdf = [retpack[1],retpack[2]]
+    return mindisdf
+#fndmindis call this
+def loopbox2(tpoint,toparr):
+    gotpoints_r = get3points(tpoint,toparr)#[0,fst,snd,dis]
+    retpack = [tpoint, gotpoints_r[1],gotpoints_r[3]]
+    return retpack
+def get3points(tpc,toparr):
+    diffarr = []
+    tmpcoordarr = []#storage
+    for i in toparr:
+        if not diffarr:
+            diffarr = i
+            if i not in tmpcoordarr:
+                tmpcoordarr.append(i)
+        retarr = getclinks(diffarr,i,10)
+        for j in retarr:
+            tmpcoordarr.append(j)
+        tmpcoordarr.append(i)
+        diffarr = i
+    dummyarr = []
+    for i in range(len(tmpcoordarr)):
+        mindis = vincenty(tmpcoordarr[i],tpc)
+        dummyarr.append([tmpcoordarr[i],mindis])
+    dummyarr.sort(key=lambda x: x[1], reverse=False)
+    top3 = []
+    top3.append(dummyarr[0][0])
+    top3.append(dummyarr[1][0])
+    top3.append(dummyarr[2][0])
+    rtarr = [0,top3[0],top3[1],dummyarr[0][1]]
+    object = abs(dummyarr[0][1]-dummyarr[1][1])
+    #self-calling point
+    if object > 0.00001 :
+        rtarr = get3points(tpc,[top3[0],top3[1],top3[2]])
+    #rtarr[3] = rtarr[3]*10
+    return rtarr 
+def getmindists(mlat,mlon,lineN):
+    global lnset, coordbase, tempcargo
+    if not lnset :###DataFrameではない形式対応（個別的に関数を呼ぶとき）
+        lnset = [lineN]
+    coordbase = slide(lnset)
+    global ttg, tkc
+    target = [mlat,mlon]
+    if target == ttg:
+        return tempcargo
+    ttg = target
+    keisan = fndmindis(target, lineN)#[fstcoord,dist]
+    tkc = keisan[1]*1000
+    retunarray = [tkc,keisan[0][0],keisan[0][1]]
+    tempcargo = retunarray
+    return retunarray
+###########################################################################################___________アジムスをカラムに追加する
+def calcAzimuth(lat1, lon1, lat2, lon2):
+    lati1 = math.radians(lat1)
+    lati2 = math.radians(lat2)
+    lonasc =math.radians(lon2-lon1);
+    x = math.sin(lonasc) * math.cos(lati2);
+    y = math.cos(lati1)*math.sin(lati2) - (math.sin(lati1)*math.cos(lati2)*math.cos(lonasc))
+    resultAzi = (math.degrees(math.atan2(x, y))+360)%360;
+    return resultAzi
+##########################################################################################
+#df対応用******DataFrameの形式使用者はこの関数を呼ぶこと
+def minimaldisDF(df):
+    toaddlist = []
+    tempdf = df[["cell_name","latitude","longitude","line"]]
+    tempdf.drop_duplicates(keep="first",inplace = True)
+    cells = tempdf["cell_name"].tolist()
+    latis = tempdf["latitude"].tolist()
+    longs = tempdf["longitude"].tolist()
+    lines = tempdf["line"].tolist()
+    if len(cells)==len(lines):
+        for i in range(len(cells)):
+            tempres = getmindists(latis[i],longs[i],lines[i])
+            azi = calcAzimuth(latis[i],longs[i],tempres[1],tempres[2])
+            toaddlist.append([cells[i], tempres[0], tempres[1], tempres[2], azi])
+    toadddf = pd.DataFrame(toaddlist, columns = ["cell_name" , "dist_to_lane", "l_lat", "l_lon","CtoL_Azi"])
+    returndf = pd.merge(df,toadddf,on="cell_name", how="left")
+    return returndf
+##########################################################################################
+#変数宣言部分
+#*****************事前作業　：　geojsonファイルの名前、計算する路線名の範囲を指定。***********************
+#geojson http://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-v2_3.html　で最新のバージョンをダウンロード
+ttg = []
+tkc = 0
+coordbase = []
+tempcargo = []
+
+##注意事項：事前にDFの中にある路線名と会社名を全てlnsetに全部入れて置くこと。ただし、同じ路線名で会社名だけ誓う２つの路線を設定する場合はlnset及び以下の4行を毎回
+lnset = [["関西線","西日本旅客鉄道"]]
+basejson = "N02-18_RailroadSection.geojson"
+basedat = getbasedata(basejson)
+coordbase = slide(lnset)
+
+targetdf = pd.read_csv("test.csv",encoding="shift-jis")
+##################
+result = minimaldisDF(targetdf)
+##################
+#lat = 34.95929208
+#lon = 135.75939440000002
+#line = "奈良線"
+#result = getmindists(lat, lon, line)
+result.to_csv("result.csv", encoding="shift-jis")
