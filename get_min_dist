@@ -72,7 +72,7 @@ def fndmindis(target, linenamef):
     dummyarr = []
     for i in range(len(lnset)):
         if linenamef == lnset[i][0] :
-          base = coordbase[i]  
+          base = coordbase[i]
     for j in range(len(base)):
         mindis = vincenty(base[j],target)
         dummyarr.append([base[j],mindis])
@@ -172,17 +172,15 @@ coordbase = []
 tempcargo = []
 
 ##注意事項：事前にDFの中にある路線名と会社名を全てlnsetに全部入れて置くこと。ただし、同じ路線名で会社名だけ誓う２つの路線を設定する場合はlnset及び以下の4行を毎回
-lnset = [["関西線","西日本旅客鉄道"]]
+#詳しい路線の名前は
+lnset = [["山陽線","西日本旅客鉄道"]]
 basejson = "N02-18_RailroadSection.geojson"
 basedat = getbasedata(basejson)
 coordbase = slide(lnset)
 
-targetdf = pd.read_csv("test.csv",encoding="shift-jis")
+targetdf = pd.read_csv("tatgetlist.csv",encoding="shift-jis")
 ##################
 result = minimaldisDF(targetdf)
 ##################
-#lat = 34.95929208
-#lon = 135.75939440000002
-#line = "奈良線"
 #result = getmindists(lat, lon, line)
 result.to_csv("result.csv", encoding="shift-jis")
